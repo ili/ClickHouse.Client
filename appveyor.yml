@@ -25,28 +25,30 @@ dotnet_csproj:
 before_build:
 - dotnet restore
 
-build_script:
-- dotnet build --no-restore --configuration Release
+build:
+  parallel: true
+  project: ClickHouse.Client.sln
+  publish_aspnet_core: true
+  publish_nuget: true
+  publish_nuget_symbols: true
+  include_nuget_references: true 
+  use_snupkg_format: true
+  verbosity: minimal
 
 before_test:
 - docker pull yandex/clickhouse-server
 - docker run -p 8123:8123 -d --name clickhouse-server yandex/clickhouse-server
 - sleep 3
 
-test_script:
-- dotnet test --no-build --framework netcoreapp3.0 --configuration Release --test-adapter-path:. --logger:Appveyor
-
 for:
 - matrix:
     only:
       - image: Ubuntu
-  build_script:
-  - msbuild /p:Configuration=Release -verbosity:minimal
+  build:
+    project: ClickHouse.Client.sln
+    publish_aspnet_core: false
+    publish_nuget: false
+    publish_nuget_symbols: false
 - matrix:
     only:
       - image: Visual Studio 2019
-  after_build:
-  - dotnet pack ClickHouse.Client/ClickHouse.Client.csproj --no-build --configuration Release --include-symbols --include-source -p:SymbolPackageFormat=snupkg
-  artifacts:
-  - path: '**/*nupkg'
-    name: NuGet
