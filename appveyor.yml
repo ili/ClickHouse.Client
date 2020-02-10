@@ -32,6 +32,7 @@ before_test:
 - docker pull yandex/clickhouse-server
 - docker run -p 8123:8123 -d --name clickhouse-server yandex/clickhouse-server
 - sleep 3
+- curl http://localhost:8123/?query=select%20version()%20format%20Values
 
 test_script:
 - dotnet test --no-build --framework netcoreapp3.0 --configuration Release --test-adapter-path:. --logger:Appveyor
