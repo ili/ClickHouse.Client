@@ -22,7 +22,7 @@ namespace ClickHouse.Client.Formats
 
         public object Read(LowCardinalityType lowCardinalityType) => Read(lowCardinalityType.UnderlyingType);
 
-        public object Read(FixedStringType fixedStringType) => Encoding.UTF8.GetString(reader.ReadBytes(fixedStringType.Length));
+        public object Read(FixedStringType fixedStringType) => reader.ReadBytes(fixedStringType.Length);
 
         public object Read(Int8Type int8Type) => reader.ReadSByte();
 
@@ -79,7 +79,12 @@ namespace ClickHouse.Client.Formats
             return tupleType.MakeTuple(contents);
         }
 
-        public object Read(StringType stringType) => reader.ReadString();
+        public object Read(StringType stringType)
+        {
+            var len = reader.Read7BitEncodedInt();
+
+            return reader.ReadBytes(len);
+        }
 
         public object Read(UuidType uuidType)
         {

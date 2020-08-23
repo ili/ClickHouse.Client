@@ -49,11 +49,42 @@ namespace ClickHouse.Client.ADO.Readers
 
         public override byte GetByte(int ordinal) => Convert.ToByte(GetValue(ordinal), CultureInfo.InvariantCulture);
 
-        public override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length) => throw new NotImplementedException();
+        public override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)
+        {
+            if (buffer.Length < bufferOffset + length)
+                throw new ArgumentException(nameof(buffer));
+
+            if (IsDBNull(ordinal))
+                return 0;
+
+            var o = GetValue(ordinal);
+            var data = o as byte[] ?? throw new InvalidCastException($"{o.GetType()} could not be converted to byte array");
+            var total = Math.Min(data.Length, length);
+
+            for (var i = 0; i < total; i++)
+                buffer[bufferOffset + i] = data[dataOffset + i];
+
+            return total;
+        }
 
         public override char GetChar(int ordinal) => Convert.ToChar(GetValue(ordinal), CultureInfo.InvariantCulture);
 
-        public override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length) => throw new NotImplementedException();
+        public override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length)
+        {
+            if (buffer.Length < bufferOffset + length)
+                throw new ArgumentException(nameof(buffer));
+
+            if (IsDBNull(ordinal))
+                return 0;
+
+            var data = GetString(ordinal);
+            var total = Math.Min(data.Length, length);
+
+            for (var i = 0; i < total; i++)
+                buffer[bufferOffset + i] = data[(int)dataOffset + i];
+
+            return total;
+        }
 
         public override string GetDataTypeName(int ordinal) => RawTypes[ordinal].ToString();
 
@@ -115,7 +146,14 @@ namespace ClickHouse.Client.ADO.Readers
             return index;
         }
 
-        public override string GetString(int ordinal) => Convert.ToString(GetValue(ordinal), CultureInfo.InvariantCulture);
+        public override string GetString(int ordinal)
+        {
+            var value = GetValue(ordinal);
+            if (value?.GetType() == typeof(byte[]))
+                return System.Text.Encoding.UTF8.GetString((byte[])value);
+
+            return Convert.ToString(GetValue(ordinal), CultureInfo.InvariantCulture);
+        }
 
         public override object GetValue(int ordinal) => CurrentRow[ordinal];
 
