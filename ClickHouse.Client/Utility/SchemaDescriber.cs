@@ -10,54 +10,53 @@ namespace ClickHouse.Client.Utility
 {
     internal static class SchemaDescriber
     {
-        private static readonly string[] Columns =
+        private static DataColumn[] Columns => new[]
         {
-            "ColumnName",
-            "ColumnOrdinal",
-            "ColumnSize",
-            "NumericPrecision",
-            "NumericScale",
-            "DataType",
-            "ProviderType",
-            "IsLong",
-            "AllowDBNull",
-            "IsReadOnly",
-            "IsRowVersion",
-            "IsUnique",
-            "IsKey",
-            "IsAutoIncrement",
-            "BaseCatalogName",
-            "BaseSchemaName",
-            "BaseTableName",
-            "BaseColumnName",
-            "AutoIncrementSeed",
-            "AutoIncrementStep",
-            "DefaultValue",
-            "Expression",
-            "ColumnMapping",
-            "BaseTableNamespace",
-            "BaseColumnNamespace",
+            new DataColumn("ColumnName", typeof(string)),
+            new DataColumn("ColumnOrdinal", typeof(int)),
+            new DataColumn("ColumnSize", typeof(int)),
+            new DataColumn("NumericPrecision"),
+            new DataColumn("NumericScale"),
+            new DataColumn("DataType", typeof(Type)),
+            new DataColumn("ProviderType"),
+            new DataColumn("IsLong", typeof(bool)),
+            new DataColumn("AllowDBNull", typeof(bool)),
+            new DataColumn("IsReadOnly", typeof(bool)),
+            new DataColumn("IsRowVersion", typeof(bool)),
+            new DataColumn("IsUnique", typeof(bool)),
+            new DataColumn("IsKey", typeof(bool)),
+            new DataColumn("IsAutoIncrement", typeof(bool)),
+            new DataColumn("BaseCatalogName"),
+            new DataColumn("BaseSchemaName"),
+            new DataColumn("BaseTableName"),
+            new DataColumn("BaseColumnName"),
+            new DataColumn("AutoIncrementSeed"),
+            new DataColumn("AutoIncrementStep"),
+            new DataColumn("DefaultValue"),
+            new DataColumn("Expression"),
+            new DataColumn("ColumnMapping", typeof(MappingType)),
+            new DataColumn("BaseTableNamespace"),
+            new DataColumn("BaseColumnNamespace"),
         };
 
         public static DataTable DescribeSchema(this ClickHouseDataReader reader)
         {
             var result = new DataTable();
-            foreach (var columnName in Columns)
-                result.Columns.Add(columnName);
+            result.Columns.AddRange(Columns);
+
             for (int i = 0; i < reader.FieldCount; i++)
-                result.Rows.Add(reader.DescribeColumn(i));
+                result.Rows.Add(reader.DescribeColumn(i, result.NewRow()));
 
             return result;
         }
 
-        private static object[] DescribeColumn(this ClickHouseDataReader reader, int ordinal)
+        private static DataRow DescribeColumn(this ClickHouseDataReader reader, int ordinal, DataRow result)
         {
             var chType = reader.GetClickHouseType(ordinal);
 
-            var result = new object[Columns.Length];
             result[0] = reader.GetName(ordinal); // ColumnName
             result[1] = ordinal; // ColumnOrdinal
-            result[2] = null; // ColumnSize
+            result[2] = -1; // ColumnSize
             result[3] = null; // NumericPrecision
             result[4] = null; // NumericScale
             result[5] = chType.FrameworkType; // DataType
