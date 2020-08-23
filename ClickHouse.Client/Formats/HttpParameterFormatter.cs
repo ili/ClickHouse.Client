@@ -12,7 +12,7 @@ namespace ClickHouse.Client.Formats
     {
         public static string Format(ClickHouseDbParameter parameter)
         {
-            if (parameter.Value is null)
+            if (parameter.Value is null || parameter.Value is DBNull)
                 return string.Empty;
             var type = string.IsNullOrWhiteSpace(parameter.ClickHouseType)
                 ? TypeConverter.ToClickHouseType(parameter.Value.GetType())
