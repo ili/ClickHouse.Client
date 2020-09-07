@@ -73,6 +73,7 @@ namespace ClickHouse.Client.Types
 
             ReverseMapping.Add(typeof(decimal), new Decimal128Type());
             ReverseMapping[typeof(DateTime)] = new DateTimeType();
+            ReverseMapping[typeof(char)] = new StringType();
         }
 
         private static void RegisterPlainType<T>()
