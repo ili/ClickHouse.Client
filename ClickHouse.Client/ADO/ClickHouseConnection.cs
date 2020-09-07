@@ -104,6 +104,8 @@ namespace ClickHouse.Client.ADO
 
         public override DataTable GetSchema(string type, string[] restrictions) => SchemaDescriber.DescribeSchema(this, type, restrictions);
 
+        public IDictionary<string, string> QuerySettings { get; set; } = new Dictionary<string, string>();
+
         internal async Task<HttpResponseMessage> PostSqlQueryAsync(string sqlQuery, CancellationToken token, ClickHouseParameterCollection parameters = null)
         {
             var uri = string.Empty;
@@ -194,6 +196,14 @@ namespace ClickHouse.Client.ADO
                 foreach (var parameter in parameters)
                 {
                     queryParameters.SetParameter(parameter.Key, parameter.Value);
+                }
+            }
+
+            if (QuerySettings != null)
+            {
+                foreach (var querySetting in QuerySettings)
+                {
+                    queryParameters.SetOrRemove(querySetting.Key, querySetting.Value);
                 }
             }
 

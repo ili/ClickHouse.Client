@@ -49,7 +49,7 @@ namespace ClickHouse.Client.ADO
 
         public override string ToString() => parameterCollection.ToString();
 
-        private void SetOrRemove(string name, string value)
+        public void SetOrRemove(string name, string value)
         {
             if (!string.IsNullOrEmpty(value))
             {
