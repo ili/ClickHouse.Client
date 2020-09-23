@@ -34,6 +34,21 @@ namespace ClickHouse.Client.Tests
         }
 
         [Test]
+        public void ShouldParseCustomParameter()
+        {
+            using var connection = new ClickHouseConnection("set_my_parameter=aaa");
+            Assert.AreEqual("aaa", connection.CustomSettings["my_parameter"]);
+        }
+
+        [Test]
+        public void ShouldEmitCustomParameter()
+        {
+            using var connection = new ClickHouseConnection();
+            connection.CustomSettings.Add("my_parameter", "aaa");
+            Assert.That(connection.ConnectionString, Contains.Substring("set_my_parameter=aaa"));
+        }
+
+        [Test]
         public void ShouldConnectToServer()
         {
             connection.Open();
@@ -46,7 +61,7 @@ namespace ClickHouse.Client.Tests
         [Test]
         public async Task ShouldPostQueryAsync()
         {
-            using var response = await connection.PostSqlQueryAsync("SELECT 1", CancellationToken.None);
+            using var response = await connection.PostSqlQueryAsync("SELECT 1 FORMAT TabSeparated", CancellationToken.None);
             var result = await response.Content.ReadAsStringAsync();
             Assert.AreEqual("1", result.Trim());
         }

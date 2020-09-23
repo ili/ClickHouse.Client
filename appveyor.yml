@@ -1,4 +1,4 @@
-version: 2.1.0.{build}
+version: 2.2.0.{build}
 image:
   - Visual Studio 2019
   - Ubuntu
@@ -18,6 +18,9 @@ nuget:
 
 services:
 - docker
+
+install:
+- dotnet tool install --global Codecov.Tool
 
 dotnet_csproj:
   patch: true

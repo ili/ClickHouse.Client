@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -17,9 +19,11 @@ namespace ClickHouse.Client.ADO
 {
     public class ClickHouseConnection : DbConnection, IClickHouseConnection, ICloneable
     {
-        private readonly HttpClient httpClient;
+        private const string CustomSettingPrefix = "set_";
 
-        private ConnectionState state = ConnectionState.Closed;
+        private readonly HttpClient httpClient;
+        private readonly ConcurrentDictionary<string, object> customSettings = new ConcurrentDictionary<string, object>();
+        private ConnectionState state = ConnectionState.Closed; // Not an autoproperty because of interface implementation
         private string serverVersion;
         private string database = "default";
         private string username;
@@ -76,6 +80,10 @@ namespace ClickHouse.Client.ADO
                     UseSession = session != null,
                     Timeout = timeout,
                 };
+
+                foreach (var kvp in CustomSettings)
+                    builder[CustomSettingPrefix + kvp.Key] = kvp.Value;
+
                 return builder.ToString();
             }
 
@@ -89,8 +97,17 @@ namespace ClickHouse.Client.ADO
                 useCompression = builder.Compression;
                 session = builder.UseSession ? builder.SessionId ?? Guid.NewGuid().ToString() : null;
                 timeout = builder.Timeout;
+
+                foreach (var key in builder.Keys.Cast<string>().Where(k => k.StartsWith(CustomSettingPrefix)))
+                {
+                    CustomSettings.Set(key.Replace(CustomSettingPrefix, string.Empty), builder[key]);
+                }
             }
         }
+
+        public IDictionary<string, object> CustomSettings => customSettings;
+
+        public override ConnectionState State => state;
 
         public override string Database => database;
 
@@ -108,35 +125,25 @@ namespace ClickHouse.Client.ADO
 
         internal async Task<HttpResponseMessage> PostSqlQueryAsync(string sqlQuery, CancellationToken token, ClickHouseParameterCollection parameters = null)
         {
-            var uri = string.Empty;
-            if (parameters == null)
+            var uriBuilder = CreateUriBuilder();
+            if (parameters != null)
             {
-                uri = MakeUri();
-            }
-            else
-            {
-                var httpParametersSupported = await this.SupportsHttpParameters();
-
-                var formattedParameters = new Dictionary<string, string>(parameters.Count);
-
-                foreach (ClickHouseDbParameter parameter in parameters)
-                {
-                    var formattedParameter = httpParametersSupported
-                        ? HttpParameterFormatter.Format(parameter)
-                        : InlineParameterFormatter.Format(parameter);
-                    formattedParameters.TryAdd(parameter.ParameterName, formattedParameter);
-                }
+                var httpParametersSupported = await SupportsHttpParameters();
 
                 if (httpParametersSupported)
                 {
-                    uri = MakeUri(null, formattedParameters);
+                    foreach (ClickHouseDbParameter parameter in parameters)
+                        uriBuilder.AddQueryParameter(parameter.ParameterName, HttpParameterFormatter.Format(parameter));
                 }
                 else
                 {
+                    var formattedParameters = new Dictionary<string, string>(parameters.Count);
+                    foreach (ClickHouseDbParameter parameter in parameters)
+                        formattedParameters.TryAdd(parameter.ParameterName, InlineParameterFormatter.Format(parameter));
                     sqlQuery = SubstituteParameters(sqlQuery, formattedParameters);
-                    uri = MakeUri();
                 }
             }
+            string uri = uriBuilder.ToString();
 
             using var postMessage = new HttpRequestMessage(HttpMethod.Post, uri);
 
@@ -156,7 +163,8 @@ namespace ClickHouse.Client.ADO
 
         internal async Task<HttpResponseMessage> PostBulkDataAsync(string sql, Stream data, bool isCompressed, CancellationToken token)
         {
-            using var postMessage = new HttpRequestMessage(HttpMethod.Post, MakeUri(sql));
+            var builder = CreateUriBuilder(sql);
+            using var postMessage = new HttpRequestMessage(HttpMethod.Post, builder.ToString());
             AddDefaultHttpHeaders(postMessage.Headers);
 
             postMessage.Content = new StreamContent(data);
@@ -180,22 +188,6 @@ namespace ClickHouse.Client.ADO
             return response;
         }
 
-        // TODO: move this method out of ClickHouseConnection
-        private string MakeUri(string sql = null, IDictionary<string, string> parameters = null)
-        {
-            var uriBuilder = new UriBuilder(serverUri);
-            var queryParameters = new ClickHouseHttpQueryParameters()
-            {
-                Database = database,
-                UseHttpCompression = useCompression,
-                SqlQuery = sql,
-                SessionId = session,
-            };
-            if (parameters != null)
-            {
-                foreach (var parameter in parameters)
-                {
-                    queryParameters.SetParameter(parameter.Key, parameter.Value);
                 }
             }
 
@@ -204,13 +196,6 @@ namespace ClickHouse.Client.ADO
                 foreach (var querySetting in QuerySettings)
                 {
                     queryParameters.SetOrRemove(querySetting.Key, querySetting.Value);
-                }
-            }
-
-            uriBuilder.Query = queryParameters.ToString();
-            return uriBuilder.ToString();
-        }
-
         private static string SubstituteParameters(string query, IDictionary<string, string> parameters)
         {
             var builder = new StringBuilder(query.Length);
@@ -243,10 +228,6 @@ namespace ClickHouse.Client.ADO
             return builder.ToString();
         }
 
-        public override ConnectionState State => state;
-
-        private AuthenticationHeaderValue AuthenticationHeader => new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
-
         public override void ChangeDatabase(string databaseName) => database = databaseName;
 
         public object Clone() => new ClickHouseConnection(ConnectionString);
@@ -269,6 +250,9 @@ namespace ClickHouse.Client.ADO
                 if (data.Length > 2 && data[0] == 0x1F && data[1] == 0x8B) // Check if response starts with GZip marker
                     throw new InvalidOperationException("ClickHouse server returned compressed result but HttpClient did not decompress it");
 
+                if (data.Length == 0) // Check if response starts with GZip marker
+                    throw new InvalidOperationException("ClickHouse server did not return version, check if the server is functional");
+
                 serverVersion = Encoding.UTF8.GetString(data).Trim();
                 state = ConnectionState.Open;
             }
@@ -285,9 +269,23 @@ namespace ClickHouse.Client.ADO
 
         protected override DbCommand CreateDbCommand() => CreateCommand();
 
+        /// <summary>
+        /// Detects whether server supports parameters through URI
+        ///   ClickHouse Release 19.11.3.11, 2019-07-18: New Feature: Added support for prepared statements. #5331 (Alexander) #5630 (alexey-milovidov)
+        /// </summary>
+        /// <returns>whether parameters are supported</returns>
+        public virtual async Task<bool> SupportsHttpParameters()
+        {
+            if (State != ConnectionState.Open)
+                await OpenAsync();
+            if (string.IsNullOrWhiteSpace(ServerVersion))
+                throw new InvalidOperationException("Connection does not define server version");
+            return Version.Parse(ServerVersion) >= new Version(19, 11, 3, 11);
+        }
+
         private void AddDefaultHttpHeaders(HttpRequestHeaders headers)
         {
-            headers.Authorization = AuthenticationHeader;
+            headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
             headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/csv"));
             headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
@@ -297,5 +295,14 @@ namespace ClickHouse.Client.ADO
                 headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("deflate"));
             }
         }
+
+        private ClickHouseUriBuilder CreateUriBuilder(string sql = null) => new ClickHouseUriBuilder(serverUri)
+        {
+            Database = database,
+            SessionId = session,
+            UseCompression = useCompression,
+            CustomParameters = customSettings,
+            Sql = sql,
+        };
     }
 }
