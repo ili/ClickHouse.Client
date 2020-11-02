@@ -4,17 +4,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using ClickHouse.Client.ADO;
 using ClickHouse.Client.Copy;
 using ClickHouse.Client.Utility;
 using NUnit.Framework;
 
 namespace ClickHouse.Client.Tests
 {
-    public class BulkCopyTests
+    public class BulkCopyTests : AbstractConnectionTestFixture
     {
-        private readonly ClickHouseConnection connection = TestUtilities.GetTestClickHouseConnection();
-
         public static IEnumerable<TestCaseData> GetInsertSingleValueTestCases()
         {
             foreach (var sample in TestUtilities.GetDataTypeSamples())
@@ -28,6 +25,7 @@ namespace ClickHouse.Client.Tests
         }
 
         [Test]
+        [Parallelizable]
         [TestCaseSource(typeof(BulkCopyTests), nameof(GetInsertSingleValueTestCases))]
         public async Task ShouldExecuteSingleValueInsertViaBulkCopy(string clickHouseType, object insertedValue)
         {
@@ -92,6 +90,29 @@ namespace ClickHouse.Client.Tests
                     builder.Append(c);
             }
             return builder.ToString();
+        }
+
+        [Test]
+        [Explicit]
+        public async Task ShouldInsertIntoTableWithLotsOfColumns()
+        {
+            var tblName = "test.b_long_columns";
+            var columnCount = 3900;
+
+            //Generating create tbl statement with a lot of columns 
+            var query = $"CREATE TABLE IF NOT EXISTS {tblName}(\n";
+            var columns = Enumerable.Range(1, columnCount)
+                .Select(x => $" some_loooooooooooooonnnnnnnnnnnngggggggg_column_name_{x} Int32");
+            query += string.Join(",\n", columns);
+            query += ")\n ENGINE = MergeTree()\n ORDER BY (some_loooooooooooooonnnnnnnnnnnngggggggg_column_name_1)";
+
+            //Create tbl in db
+            await connection.ExecuteStatementAsync(query);
+
+            var bulkCopy = new ClickHouseBulkCopy(connection) { DestinationTableName = tblName };
+
+            var rowToInsert = new[] { Enumerable.Range(1, columnCount).Select(x => (object)x).ToArray() };
+            await bulkCopy.WriteToServerAsync(rowToInsert);
         }
     }
 }

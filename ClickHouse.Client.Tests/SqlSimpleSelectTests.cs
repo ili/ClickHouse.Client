@@ -14,7 +14,7 @@ namespace ClickHouse.Client.Tests
     [Parallelizable]
     [TestFixture(true)]
     [TestFixture(false)]
-    public class SqlSimpleSelectTests
+    public class SqlSimpleSelectTests : IDisposable
     {
         private readonly ClickHouseConnection connection;
 
@@ -27,6 +27,7 @@ namespace ClickHouse.Client.Tests
             .Select(sample => new TestCaseData($"SELECT {sample.ExampleExpression}") { ExpectedResult = sample.ExampleValue });
 
         [Test]
+        [Parallelizable]
         [TestCaseSource(typeof(SqlSimpleSelectTests), nameof(SimpleSelectQueries))]
         public async Task<object> ShouldExecuteSimpleSelectQuery(string sql)
         {
@@ -53,6 +54,7 @@ namespace ClickHouse.Client.Tests
         [TestCase("你好")]
         [TestCase("こんにちは")]
         [TestCase("⌬⏣")]
+        [Parallelizable]
         public async Task ShouldSelectUnicode(string input)
         {
             using var reader = await connection.ExecuteReaderAsync($"SELECT '{input}'");
@@ -93,6 +95,9 @@ namespace ClickHouse.Client.Tests
         [Test]
         public async Task DateTime64SelectShouldHaveCorrectTimezone()
         {
+            if (!TestUtilities.FeatureFlags.DateTime64Supported)
+                Assert.Inconclusive("Server does not support DateTime64");
+
             using var reader = await connection.ExecuteReaderAsync("SELECT toDateTime64(1577836800, 3, 'Asia/Sakhalin')");
 
             reader.AssertHasFieldCount(1);
@@ -192,5 +197,7 @@ namespace ClickHouse.Client.Tests
             var schema = reader.GetSchemaTable();
             Assert.AreEqual(2, schema.Rows.Count);
         }
+
+        public void Dispose() => connection?.Dispose();
     }
 }

@@ -1,5 +1,4 @@
 ﻿using System.Threading.Tasks;
-using ClickHouse.Client.ADO;
 using NUnit.Framework;
 using Dapper;
 using System.Linq;
@@ -9,10 +8,8 @@ using System;
 
 namespace ClickHouse.Client.Tests.ORM
 {
-    public class DapperTests
+    public class DapperTests : AbstractConnectionTestFixture
     {
-        private readonly ClickHouseConnection connection = TestUtilities.GetTestClickHouseConnection(default);
-
         public static IEnumerable<TestCaseData> SimpleSelectQueries => TestUtilities.GetDataTypeSamples()
             .Where(s => ShouldBeSupportedByDapper(s.ClickHouseType))
             .Where(s => s.ExampleValue != DBNull.Value)
@@ -41,6 +38,7 @@ namespace ClickHouse.Client.Tests.ORM
         }
 
         [Test]
+        [Parallelizable]
         [TestCaseSource(typeof(DapperTests), nameof(SimpleSelectQueries))]
         public async Task ShouldExecuteSelectWithSingleParameterValue(string sql, object value)
         {

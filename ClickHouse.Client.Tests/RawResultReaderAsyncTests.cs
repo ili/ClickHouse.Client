@@ -1,15 +1,12 @@
 ﻿using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using ClickHouse.Client.ADO;
 using NUnit.Framework;
 
 namespace ClickHouse.Client.Tests
 {
-    public class RawResultReaderAsyncTests
+    public class RawResultReaderAsyncTests : AbstractConnectionTestFixture
     {
-        private readonly ClickHouseConnection connection = TestUtilities.GetTestClickHouseConnection(default);
-
         [Test]
         public async Task ShouldReadRawResult()
         {

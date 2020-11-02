@@ -1,14 +1,11 @@
 ﻿using System.Threading.Tasks;
-using ClickHouse.Client.ADO;
 using ClickHouse.Client.Utility;
 using NUnit.Framework;
 
 namespace ClickHouse.Client.Tests
 {
-    public class ParameterizedInsertTests
+    public class ParameterizedInsertTests : AbstractConnectionTestFixture
     {
-        private readonly ClickHouseConnection connection = TestUtilities.GetTestClickHouseConnection();
-
         [Test]
         public async Task ShouldInsertParameterizedArray()
         {

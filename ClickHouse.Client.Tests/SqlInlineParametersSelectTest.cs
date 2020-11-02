@@ -17,7 +17,7 @@ namespace ClickHouse.Client.Tests
         {
             public OldClickHouseVersionConnection(string connectionString) : base(connectionString) { }
 
-            public override Task<bool> SupportsHttpParameters() => Task.FromResult(false);
+            internal override Task<bool> SupportsHttpParameters() => Task.FromResult(false);
         }
 
         private readonly ClickHouseConnection connection;
@@ -37,6 +37,7 @@ namespace ClickHouse.Client.Tests
         public async Task EnsureCompatibilityModeIsUsed() => Assert.IsFalse(await connection.SupportsHttpParameters());
 
         [Test]
+        [Parallelizable]
         [TestCaseSource(typeof(SqlParameterizedSelectTests), nameof(TypedQueryParameters))]
         public async Task ShouldExecuteParameterizedSelectWithExplicitType(string exampleExpression, string clickHouseType, object value)
         {
@@ -51,6 +52,7 @@ namespace ClickHouse.Client.Tests
         }
 
         [Test]
+        [Parallelizable]
         [TestCaseSource(typeof(SqlParameterizedSelectTests), nameof(TypedQueryParameters))]
         public async Task ShouldExecuteParameterizedSelectWhereWithExplicitType(string exampleExpression, string clickHouseType, object value)
         {
