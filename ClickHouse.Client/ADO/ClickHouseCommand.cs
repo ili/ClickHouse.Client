@@ -127,8 +127,19 @@ namespace ClickHouse.Client.ADO
                 default:
                     break;
             }
-            var result = await connection.PostSqlQueryAsync(sqlBuilder.ToString(), linkedCancellationTokenSource.Token, commandParameters).ConfigureAwait(false);
-            return new ClickHouseBinaryReader(result);
+
+            var query = sqlBuilder.ToString();
+            var result = await connection.PostSqlQueryAsync(query, linkedCancellationTokenSource.Token, commandParameters).ConfigureAwait(false);
+
+            // ClickHouse can return raise error on "high load" & return 200OK
+            try
+            {
+                return new ClickHouseBinaryReader(result);
+            }
+            catch (ClickHouseServerException ex)
+            {
+                throw ClickHouseServerException.FromServerResponse(ex.Message, query);
+            }
         }
     }
 }

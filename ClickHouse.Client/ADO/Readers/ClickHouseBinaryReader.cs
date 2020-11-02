@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Linq;
 using System.Net.Http;
 using ClickHouse.Client.Formats;
 using ClickHouse.Client.Types;
@@ -18,7 +19,19 @@ namespace ClickHouse.Client.ADO.Readers
             var stream = new BufferedStream(httpResponse.Content.ReadAsStreamAsync().GetAwaiter().GetResult(), BufferSize);
             reader = new ExtendedBinaryReader(stream); // will dispose of stream
             streamReader = new BinaryStreamReader(reader);
-            ReadHeaders();
+
+            // ClickHouse can return raise error on "high load" & return 200OK
+            try
+            {
+                ReadHeaders();
+            }
+            catch (EndOfStreamException)
+            {
+                var message = FieldNames?.Length > 0
+                    ? "Server error, message corrupted: " + string.Join(string.Empty, FieldNames)
+                    : "Unexpected server error";
+                throw ClickHouseServerException.FromServerResponse(message, string.Empty);
+            }
         }
 
         private void ReadHeaders()
