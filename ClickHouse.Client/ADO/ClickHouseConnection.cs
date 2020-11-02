@@ -270,7 +270,8 @@ namespace ClickHouse.Client.ADO
                 await OpenAsync();
             if (string.IsNullOrWhiteSpace(ServerVersion))
                 throw new InvalidOperationException("Connection does not define server version");
-            return Version.Parse(ServerVersion) >= new Version(19, 11, 3, 11);
+            return Version.TryParse(ServerVersion, out var serverVersion) &&
+                serverVersion >= new Version(19, 11, 3, 11);
         }
 
         private void AddDefaultHttpHeaders(HttpRequestHeaders headers)
